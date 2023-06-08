@@ -1104,6 +1104,13 @@ func (p *OAuthProxy) getOAuthRedirectURI(req *http.Request) string {
 func (p *OAuthProxy) getAuthenticatedSession(rw http.ResponseWriter, req *http.Request) (*sessionsapi.SessionState, error) {
 	session := middlewareapi.GetRequestScope(req).Session
 
+	if session != nil && len(session.Groups) == 0 {
+		err := p.provider.EnrichSession(req.Context(), session)
+		if err != nil {
+			logger.Errorf("Error while trying to enrich session state: %v", err)
+		}
+	}
+
 	// Check this after loading the session so that if a valid session exists, we can add headers from it
 	if p.IsAllowedRequest(req) {
 		return session, nil

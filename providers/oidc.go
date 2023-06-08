@@ -102,7 +102,51 @@ func (p *OIDCProvider) EnrichSession(_ context.Context, s *sessions.SessionState
 	if s.Email == "" {
 		return errors.New("neither the id_token nor the profileURL set an email")
 	}
+	if len(s.Groups) == 0 {
+		// Retrieve user info
+		userinfo, err := p.getUserinfo(ctx, s)
+		if err != nil {
+			return fmt.Errorf("failed to retrieve user info: %v", err)
+		}
+
+		if len(userinfo.Groups) > 0 {
+			s.Groups = userinfo.Groups
+		}
+	}
 	return nil
+}
+
+type OIDCUserinfo struct {
+	Email             string
+	Verified          *bool
+	PreferredUsername string
+	Groups            []string
+}
+
+func (p *OIDCProvider) getUserinfo(ctx context.Context, s *sessions.SessionState) (*OIDCUserinfo, error) {
+	// Build user info url from login url of OIDC instance
+	userinfoURL := *p.ProfileURL
+
+	resp := requests.New(userinfoURL.String()).
+		WithContext(ctx).
+		SetHeader("Authorization", "Bearer "+s.AccessToken).
+		Do()
+
+	var userinfo OIDCUserinfo
+
+	jsonData, err := resp.UnmarshalSimpleJSON()
+
+	if err != nil {
+		return nil, fmt.Errorf("error getting user info: %v", err)
+	}
+
+	groups, err := jsonData.Get(p.GroupsClaim).StringArray()
+	if err != nil {
+		return nil, fmt.Errorf("error parsing groups: %v", err)
+	}
+	userinfo.Groups = groups
+
+	return &userinfo, nil
 }
 
 // ValidateSession checks that the session's IDToken is still valid
@@ -192,7 +236,13 @@ func (p *OIDCProvider) redeemRefreshToken(ctx context.Context, s *sessions.Sessi
 // CreateSessionFromToken converts Bearer IDTokens into sessions
 func (p *OIDCProvider) CreateSessionFromToken(ctx context.Context, token string) (*sessions.SessionState, error) {
 	ctx = oidc.ClientContext(ctx, requests.DefaultHTTPClient)
+
+	logger.Printf("CreateSessionFromToken called with token %s and context %s", token, ctx)
+
 	idToken, err := p.Verifier.Verify(ctx, token)
+
+	logger.Printf("idToken was %s and error %s", token, err)
+
 	if err != nil {
 		return nil, err
 	}
