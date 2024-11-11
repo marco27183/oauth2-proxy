@@ -1,5 +1,5 @@
 # This ARG has to be at the top, otherwise the docker daemon does not known what to do with FROM ${RUNTIME_IMAGE}
-ARG RUNTIME_IMAGE=gcr.io/distroless/static:nonroot
+ARG RUNTIME_IMAGE=remote-docker.artifactory.swisscom.com/alpine:3.17.2
 # version is shared between mutiple buildstages
 ARG VERSION
 
@@ -7,10 +7,13 @@ ARG VERSION
 #  cache sharing of the go mod download step.
 # Go cross compilation is also faster than emulation the go compilation across
 #  multiple platforms.
-FROM --platform=${BUILDPLATFORM} docker.io/library/golang:1.22-bookworm AS builder
+FROM --platform=${BUILDPLATFORM} remote-docker.artifactory.swisscom.com/golang:1.22-bookworm AS builder
 
 # Copy sources
 WORKDIR $GOPATH/src/github.com/oauth2-proxy/oauth2-proxy
+
+
+ENV GOPROXY=https://artifactory.swisscom.com/artifactory/api/go/golang-go-virtual
 
 # Fetch dependencies
 COPY go.mod go.sum ./
